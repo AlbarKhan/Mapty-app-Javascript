@@ -18,13 +18,23 @@ class WorkOut {
     this.distance = distance; //in km
     this.duration = duration; // in min
   }
+
+  _setDescription() {
+    //prettier-ignore
+    const months = ['January','Feburary','March','April','May','June','July','August','September','October','November','December'];
+    this.description = `${this.type[0].toUpperCase()}${this.type.slice(1)} on ${
+      months[this.date.getMonth()]
+    } ${this.date.getDate()}`;
+  }
 }
 
 class Running extends WorkOut {
+  type = "running";
   constructor(cords, distance, duration, cadence) {
     super(cords, duration, distance);
     this.cadence = cadence;
     this.calcPace();
+    this._setDescription();
   }
 
   calcPace() {
@@ -34,10 +44,12 @@ class Running extends WorkOut {
 }
 
 class Cycling extends WorkOut {
+  type = "cycling";
   constructor(cords, distance, duration, elevationGain) {
     super(cords, distance, duration);
     this.elevationGain = elevationGain;
     this.calcSpeed();
+    this._setDescription();
   }
 
   calcSpeed() {
@@ -92,14 +104,14 @@ class App {
   _newWorkout(e) {
     e.preventDefault();
     const validInput = (...inputs) => {
-      inputs.every((inp) => Number.isFinite(inp));
+      return inputs.every((inp) => Number.isFinite(inp));
     };
 
     const allPositive = (...inputs) => {
-      inputs.every((inp) => inp > 0);
+      return inputs.every((inp) => inp > 0);
     };
     // Get Data from form
-    const type = inputType.value;
+    let type = inputType.value;
     const distance = +inputDistance.value;
     const duration = +inputDuration.value;
     const { lat, lng } = this.#mapEvent.latlng;
@@ -109,30 +121,56 @@ class App {
     // if Workout running , create running object
     if (type === "cycling") {
       const elevation = +inputElevation.value;
-      if (!validInput(distance, duration) || !allPositive) {
+      if (
+        !validInput(distance, duration, elevation) ||
+        !allPositive(distance, duration)
+      ) {
         return alert("Inputs have yo be positive");
       }
 
       workout = new Cycling([lat, lng], distance, duration, elevation);
+      type = "cycling";
     }
     // if workout cycling,create cycling object
     if (type === "running") {
       const cadence = +inputCadence.value;
-      if (!validInput(distance, duration, cadence) || !allPositive) {
+      if (
+        !validInput(distance, duration, cadence) ||
+        !allPositive(distance, duration, cadence)
+      ) {
         return alert("Inputs have yo be positive");
       }
-      workout = new Cycling([lat, lng], distance, duration, cadence);
+      workout = new Running([lat, lng], distance, duration, cadence);
+      type = "running";
     }
 
     // Add new Workout to workout array
     this.workouts.push(workout);
+    console.log(workout);
     // inputDistance.value =
     //   inputDuration.value =
     //   inputCadence.value =
     //   inputElevation.value =
     //     "";
 
-    L.marker([lat, lng])
+    this._renderWokoutMarker(workout);
+    this._renderWorkout(workout);
+    this._hideForm();
+  }
+
+  _hideForm() {
+    inputDistance.value =
+      inputDuration.value =
+      inputCadence.value =
+      inputElevation.value =
+        "";
+
+    // form.style.opacity = "0";
+    form.classList.add("hidden");
+  }
+
+  _renderWokoutMarker(workout) {
+    L.marker(workout.cords)
       .addTo(this.#map)
       .bindPopup(
         L.popup({
@@ -140,11 +178,64 @@ class App {
           minWidth: 100,
           autoClose: false,
           closeOnClick: false,
-          className: "running-popup",
+          className: `${workout.type}-popup`,
         })
       )
-      .setPopupContent("Workout")
+      .setPopupContent(
+        `${workout.type === "running" ? "🏃‍♂️" : "🚴‍♀️"} ${workout.description}`
+      )
       .openPopup();
+  }
+
+  _renderWorkout(workout) {
+    let html = `
+    <li class="workout workout--${workout.type}" data-id="${workout.id}">
+          <h2 class="workout__title">${workout.description}</h2>
+          <div class="workout__details">
+            <span class="workout__icon">${
+              workout.type === "running" ? "🏃‍♂️" : "🚴‍♀️"
+            }</span>
+            <span class="workout__value">${workout.distance.toFixed(1)}</span>
+            <span class="workout__unit">km</span>
+          </div>
+          <div class="workout__details">
+            <span class="workout__icon">⏱</span>
+            <span class="workout__value">${workout.duration}</span>
+            <span class="workout__unit">min</span>
+          </div>
+    `;
+
+    if (workout.type === "running") {
+      html += `
+      <div class="workout__details">
+            <span class="workout__icon">⚡️</span>
+            <span class="workout__value">${workout.pace}</span>
+            <span class="workout__unit">min/km</span>
+          </div>
+          <div class="workout__details">
+            <span class="workout__icon">🦶🏼</span>
+            <span class="workout__value">${workout.cadence}</span>
+            <span class="workout__unit">spm</span>
+          </div>
+        </li>
+      `;
+    }
+    if (workout.type === "cycling") {
+      html += `
+      <div class="workout__details">
+            <span class="workout__icon">⚡️</span>
+            <span class="workout__value">${workout.speed.toFixed(1)}</span>
+            <span class="workout__unit">km/h</span>
+          </div>
+          <div class="workout__details">
+            <span class="workout__icon">⛰</span>
+            <span class="workout__value">${workout.elevationGain}</span>
+            <span class="workout__unit">m</span>
+          </div>
+        </li>
+      `;
+    }
+    form.insertAdjacentHTML("afterend", html);
   }
 
   _toggleElevationField() {
